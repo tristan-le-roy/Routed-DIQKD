@@ -396,7 +396,7 @@ def compute_keyrate(etaBL):
     
     else:
         ent, err, keyrate = get_keyrate_for_q(0, momentequality_constraints, etaBL); q = 0 ##without preprocessing
-        return etaBL, keyrate, q, ent, err
+        return etaBL, keyrate, q
 
 """
 Now we start with setting up the ncpol2sdpa computations
@@ -482,8 +482,8 @@ for etaA in etaAs:
     outputs = []
     for etaBL in etaBLs:
         try:
-            etaBL_, keyrate_, q_, ent_, err_ = compute_keyrate(etaBL)
-            outputs = outputs + [[etaBL_, keyrate_, q_, ent_, err_]]
+            etaBL_, keyrate_, q_ = compute_keyrate(etaBL)
+            outputs = outputs + [[etaBL_, keyrate_, q_]]
             print("The key-rate for (etaA,etaBL) = ", (etaA,etaBL), " is ", keyrate_)
             if keyrate_ < 0:
                 break
