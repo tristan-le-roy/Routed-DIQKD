@@ -13,12 +13,7 @@ Noisy-preprocessing can be used in order to boost rates.
 The protocols we consider are as follows:
     Alice measures X and Z.
     Closeby Bob measures Z+X and Z-X.
-    Distant Bob measures one of the two cases:
-        1. Z+X, Z-X, X. Key is generated when Alice and Bob both measure X (i.e., x = 0 and y = 2).
-        2. X and Z. Key is generated when Alice and Bob both measure X (i.e., x = 0 and y = 0).
-
-All the parties bin their no-click outcomes except for the distant Bob, who does not bin his outcomes only for the key generating input.
-Note that when BobL measures X, if the round is a test round then he bins but if it is a key round then he does not bin.
+    Distant Bob measures Z+X, Z-X, X. Key is generated when Alice and Bob both measure X (i.e., x = 0 and y = 2).
 """
 
 def cond_ent(joint, marg):
@@ -51,9 +46,9 @@ def objective(ti, q):
         ti     --    i-th node
         q      --    bit flip probability
     """
-    obj = 0.0
-    # F = [A[0][0], 1 - A[0][0]]                # POVM for Alices key gen measurement
-    F = [P([0],[0],"A"), P([1],[0],"A")]   
+    obj = 0.0    
+    F = [P([0],[0],"A"), P([1],[0],"A")]   # POVM for Alices key gen measurement
+
     for a in range(A_config[0]):
         b = (a + 1) % 2                     # (a + 1 mod 2)
         M = (1-q) * F[a] + q * F[b]         # Noisy preprocessing povm element
@@ -95,7 +90,6 @@ def compute_entropy(SDP, q, momentequality_constraints):
 
         SDP.set_objective(new_objective)
         SDP.process_constraints(momentequalities=momentequality_constraints,momentinequalities=moment_inequality_constraints)
-        # SDP.solve('mosek', solverparameters = {'num_threads': int(NUM_SUBWORKERS)})
         SDP.solve()
 
         if SDP.status == 'optimal':
@@ -116,9 +110,13 @@ def HAgB(MA,rho, etaA, etaBL, q):
     a fixed detection efficiency and noisy preprocessing. Computes the relevant
     components of the distribution and then evaluates the conditional entropy.
 
-        eta    --    detection efficiency
-        q      --    bitflip probability
+        MA      --  measurements of Alice
+        rho     --  state shared by Alice and Bob
+        etaA    --  detection efficiency of Alice
+        etaBL   --  detection efficiency of faraway Bob
+        q       --  bitflip probability
     """
+
     id = qtp.qeye(2)[:]
     # Noiseless measurements
     a00 = MA[0,0]
@@ -172,6 +170,11 @@ def HAgB(MA,rho, etaA, etaBL, q):
         return cond_ent(qjoint, qmarg)
 
 def get_qm_implementation():
+    """
+    Computes the state shared between Alice and Bob and
+    the measurements done by both side
+    """
+
     v = visibility
     [I, X, Y, Z] = [qtp.qeye(2)[:], qtp.sigmax()[:], qtp.sigmay()[:], qtp.sigmaz()[:]]
     [XR , ZR] = [(X+Z)/sqrt(2) , (X-Z)/sqrt(2)]
@@ -187,6 +190,14 @@ def get_qm_implementation():
     return phip, MA, MB
 
 def get_p_ideal(phip,MA,MB):
+    """
+    Computes the probability ditribution in the non-noisy ideal case
+
+        phip    --  state shared by Alice and Bob
+        MA      --  measures of Alice
+        MB      --  measure of faraway Bob
+    """
+
     pchsh = np.zeros((nA,nB,nX,nY))
     pbb84= np.zeros((nA,nB,nX,nY))
     for x in range(nX):
@@ -200,7 +211,18 @@ def get_p_ideal(phip,MA,MB):
 
     return pchsh, pbb84
 
-def get_p_obs(pchsh,pbb84,etaA,etaBS,etaBL,Alice_bins_for_test_rounds,BobS_bins_for_test_rounds,BobL_bins_for_test_rounds): 
+def get_p_obs(pchsh,pbb84,etaA,etaBS,etaBL,Alice_bins_for_test_rounds,BobS_bins_for_test_rounds,BobL_bins_for_test_rounds):
+    """
+    Computes the probability distribution in the noisy case. These are
+    the values that will be used as constraints in the SDP
+
+        pchsh   --  CHSH correlations in the non-noisy case
+        pbb84   --  BB84 correlations in the non-noisy case
+        etaA    --  detection efficiency of Alice
+        etaBS   --  detection efficiency of closeby Bob
+        etaBL   --  detection efficiency of faraway Bob
+    """ 
+
     nZ = 2
     p_obs = np.zeros((nA+1,nB+1,nX,nY,nZ) , dtype=object)
     ### Add the probabilities for 'click' events
@@ -254,9 +276,9 @@ def get_p_obs(pchsh,pbb84,etaA,etaBS,etaBL,Alice_bins_for_test_rounds,BobS_bins_
 
 def score_constraints(P, p_obs):
     """
-    Returns the moment equality constraints for the distribution. We only look at constraints coming
-    from the inputs 0/1. Potential to improve by adding input 2 also?
+    Returns the moment equality constraints for the distribution.
     """
+
     constraints = []
     for a in range(nA):
         for b in range(nB):
@@ -284,8 +306,10 @@ def get_subs():
     Returns any substitution rules to use with ncpol2sdpa. E.g. projections and
     commutation relations.
     """
+
+    #Alice and Bob measurements are projectors
     subs = P.substitutions
-    # subs.update(ncp.projective_measurement_constraints(A,B))
+
     # Finally we note that Alice and distant BobL's (but not BobS's) operators should All commute with Eve's ops 
     Alice_ops = P.get_extra_monomials("A")
     BobL_ops = [P([j],[k],"B") for k in range(2,len(B_config)) for j in range(B_config[k]-1)]
@@ -341,6 +365,13 @@ def get_levels_manually():
     return level1+level2 
 
 def get_keyrate_for_q(q, momentequality_constraints,etaBL):
+    """
+    Subfunction used to optimise q for noisy pre-processing
+
+        q       --  noisy preprocessing probabilyty
+        etaBL   --  detection efficiency of faraway Bob
+    """
+
     ent = compute_entropy(sdp,q,momentequality_constraints)
     err = HAgB(MA , phip, etaA, etaBL, q)
     keyrate = ent - err
@@ -350,12 +381,19 @@ def get_keyrate_for_q(q, momentequality_constraints,etaBL):
         return ent, err, keyrate
 
 def compute_keyrate(etaBL):
+    """
+    Computes the keyrate for a given detection efficiency of Bob.
+    """
+
     p_obs = get_p_obs(pchsh, pbb84, etaA, etaBS, etaBL,Alice_bins_for_test_rounds,BobS_bins_for_test_rounds,BobL_bins_for_test_rounds) 
     momentequality_constraints = score_constraints(P, p_obs)
+
+    #If we use noisy pre-processing, optimise over q
     if noisy_preprocessing == True:
         res = minimize_scalar(get_keyrate_for_q, bounds = (0,0.5),  args = (momentequality_constraints, etaBL), method='bounded', options={'disp': True})
         keyrate = -res.fun ; q = res.x
         return etaBL, keyrate, q
+    
     else:
         ent, err, keyrate = get_keyrate_for_q(0, momentequality_constraints, etaBL); q = 0 ##without preprocessing
         return etaBL, keyrate, q, ent, err
@@ -370,8 +408,6 @@ import qutip as qtp
 from scipy.optimize import minimize_scalar
 from sympy.physics.quantum.dagger import Dagger
 import chaospy
-from glob import glob
-from joblib import Parallel, delayed, parallel_config
 import matplotlib.pyplot as plt
 import datetime
 
@@ -480,7 +516,6 @@ for etaA in etaAs:
     plt.plot(etaBLs,keyrates,'b-' , linewidth=2)
 
     print("etaS = ", etaA)
-    print("I am Abhishek's PC - computing chsh with binning and visibility = 0.99. Level = 2+ABZ+AZB+AABZ+AAZB")
     end_time = datetime.datetime.now()
     print(end_time)
     
@@ -488,5 +523,3 @@ for etaA in etaAs:
 end_time = datetime.datetime.now()
 
 print(end_time)
-
-print("I am Abhishek's PC - computing chsh with binning and visibility = 0.99. Level = 2+ABZ+AZB+AABZ+AAZB")
