@@ -1,3 +1,3 @@
-Plots and python scripts that reproduce rates of routed and non-routed DIQKD protocols found in "TODO: arxiv link". Computations are based on the work [arxiv:2106.13692](https://arxiv.org/abs/2106.13692).
+Plots and python scripts that reproduce rates of routed and non-routed DIQKD protocols found in "TODO: arxiv link". Computations are based on the work [arxiv:2106.13692](https://arxiv.org/abs/2106.13692). The code of the scripts is taken from this [repository](https://github.com/peterjbrown519/DI-rates/tree/main). Credits to [Edwin Lobo](https://github.com/eplobo) for wrting most of the scripts.
 
 IMPORTANT: The implementation works best with the latest version of the python package ncpol2sdpa. To find the latest version please install directly from this [github fork](https://github.com/peterjbrown519/ncpol2sdpa).
